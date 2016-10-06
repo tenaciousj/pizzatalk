@@ -5,9 +5,9 @@ Steps:
 1) Cortana vs Google Now vs Alexa
 
 2) Content of Sentence (Pizza type)
-  - **Size
-  - Toppings
-  - # of Pizzas**
+  - Size *
+  - Toppings *
+  - # of Pizzas *
   - Negative Cases
   - Crust Type
   - Log in feature?
@@ -26,8 +26,8 @@ Steps:
 
 Structure:
 
-↓←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
-↓                                                                                                                 ↑
-Cloud Speech API -> Syntax Net (Python) -> Node Dominos API Wrapper (js) -> Webpage w/ Speech synthesis API (js)  ↑
+
+                                                                                                                 
+Cloud Speech API -> Syntax Net (Python) -> Node Dominos API Wrapper (js) -> Webpage w/ Speech synthesis API (js) -> (re-loop)
 
   
