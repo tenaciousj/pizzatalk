@@ -1,0 +1,20 @@
+{
+  "name": "node-js-getting-started",
+  "version": "0.2.5",
+  "description": "A sample Node.js app using Express 4",
+  "engines": {
+    "node": "5.9.1"
+  },
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "alexa-sdk": "^1.0.6",
+    "dominos": "^2.1.1",
+    "ejs": "2.4.1",
+    "express": "4.13.3",
+    "npmi": "^2.0.1",
+    "or": "^0.2.0"
+  }
+}
