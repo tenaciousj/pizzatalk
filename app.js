@@ -1,5 +1,4 @@
 var pizzapi = require('dominos');
-
 var addr = new pizzapi.Address({
     Street: '2133 Sheridan Rd',
     City: 'Evanston',
