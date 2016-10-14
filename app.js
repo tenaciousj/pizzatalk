@@ -53,13 +53,15 @@ function pickStore(storeData) {
     order.storeID = closestInfo.ID;
     store.getFriendlyNames(
         function (menu) {
-            if (menu.success === true) {
+            if (menu.success) {
                 for (var i = 0, l = menu.result.length; i < l; i++) {
                     var wrapper = menu.result[i];
-                    var itemId = Object.keys(wrapper)[0];
-                    var item = wrapper[itemId];
-                    var name = item.Name;
-                    console.log(i + " - " + name + " - " + item.Price);
+                    var itemId = menu.result[i][Object.keys(wrapper)];
+                    var item = Object.keys(wrapper);
+                    // console.log(item);
+                    //var item = wrapper[itemId];
+                    //var name = item.Name;
+                    console.log(i + " - " + item + " - " + item.Price);
                 }
                 console.log("done");
             }
