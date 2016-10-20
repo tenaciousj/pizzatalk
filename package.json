@@ -1,6 +1,6 @@
 {
   "name": "PizzaTalk",
-  "version": "0.1",
+  "version": "0.1.0",
   "description": "An Alexa skill ofr conversationally order Dominos pizza",
   "engines": {
     "node": "5.9.1"
