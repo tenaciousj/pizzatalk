@@ -1,1 +1,4 @@
 node_modules/*
+dist.zip
+aws-credentials.json
+launch.json

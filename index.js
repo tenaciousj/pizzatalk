@@ -1,35 +1,25 @@
-var express = require('express');
+var alexa = require('alexa-app');
 var pizzapi = require('dominos');
-var app = express();
 
-app.set('port', (process.env.PORT || 5000));
+var app = new alexa.app('Pizza');
 
-app.use(express.static(__dirname + '/public'));
-
-// // views is directory for all template files
-// app.set('views', __dirname + '/views');
-// app.set('view engine', 'ejs');
-
-app.get('/', function(request, response) {
-  console.log('---------');
-  console.log('Home Page');
-  console.log('---------');
+app.launch(function(request,response) {
+    // Do nothing on launch
+    // In the future we can retrieve state here
+	return false;
 });
 
-app.get('/pizzaInfo', function(request, response) {
-	pizzapi.Util.findNearbyStores(
-	  '2146 Sherman Ave Apt. GC, Evanston, IL, 60201',
-	  'Delivery',
-	  function(storeData){
-	  	var stores = storeData.result.Stores;
-	  	console.log(stores);  
-	  }
-	);
-});
+app.intent('TestIntent', {},
+    function (request, response) {
+        response.say("Hello team pizza.");
+    }
+);
 
+app.intent('TheUsual', {},
+    function (request, response) {
+        response.say("Your usual pizza, coming right up");
+    }
+);
 
-app.listen(app.get('port'), function() {
-  console.log('Node app is running on port', app.get('port'));
-});
-
-
+// Export a handler function for Lambda to work with
+exports.handler = app.lambda();
