@@ -1,27 +1,21 @@
 var pizzapi = require('dominos');
 
 var fullAddress = new pizzapi.Address('2133 Sheridan Rd, Evanston, IL, 60201');
-var myCustomer = new pizzapi.Customer(
-  {
-      address: fullAddress,
-      firstName: 'William',
-      lastName: 'Xiao',
-      phone: '8167164599',
-      email: 'paep3nguin@gmail.com'
-  }
-);
+var myCustomer = new pizzapi.Customer({
+    address: fullAddress,
+    firstName: 'William',
+    lastName: 'Xiao',
+    phone: '8167164599',
+    email: 'paep3nguin@gmail.com'
+});
 
 
-var order = new pizzapi.Order(
-  {
-      customer: myCustomer,
-
-      //foster
-      storeID: 9175,
-
-      deliveryMethod: 'Delivery'
-  }
-);
+var order = new pizzapi.Order({
+    customer: myCustomer,
+    //foster
+    storeID: 9175,
+    deliveryMethod: 'Delivery'
+});
 
 order.addItem(new pizzapi.Item({
     code: '12SCREEN',
@@ -40,22 +34,18 @@ order.addCoupon(new pizzapi.Coupon({
     quantity: 1
 }));
 
-order.validate(
-  function(result) {
-      console.log("-------");
-      console.log("We did it!");
-      console.log(JSON.stringify(result, null, 2));
+order.validate(function (result) {
+    console.log("-------");
+    console.log("We did it!");
+    console.log(JSON.stringify(result, null, 2));
+});
 
-  }
-);
-
-order.price(
-  function(result) {
-      console.log("-------");
-      console.log("Price!");
-      console.log(JSON.stringify(result, null, 2));
-  }
-);
+order.price(function (result) {
+    console.log("-------");
+    console.log("Price!");
+    console.log(JSON.stringify(result, null, 2));
+    console.log(result.result.Order.Products[0].descriptions[0].value);
+});
 
 var cardNumber = '4100123422343234';
 
