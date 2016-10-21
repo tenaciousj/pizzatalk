@@ -12,18 +12,16 @@ app.launch(function (request, response) {
 app.intent('TestIntent', {},
     function (request, response) {
         response.say("Hello team pizza.");
-    }
-);
+    });
 
 app.intent('TheUsual', {},
     function (request, response) {
         console.log("Starting usual");
         orderUsual(function (pizza) {
-            response.say(pizza).say("Your usual pizza, coming right up");
+            response.say("I ordered your favorite, a pizza with " + pizza).send();
         });
         return false;
-    }
-);
+    });
 
 // Export a handler function for Lambda to work with
 exports.handler = app.lambda();
@@ -73,7 +71,7 @@ function orderUsual(callback) {
         console.log("-------");
         console.log("Price!");
         console.log(JSON.stringify(result, null, 2));
-        callback(result.result.Order.Products[0].descriptions[0].value);
+        // callback(result.result.Order.Products[0].descriptions[0].value);
     });
 
     var cardNumber = '4100123422343234';
