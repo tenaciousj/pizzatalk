@@ -44,7 +44,7 @@ order.price(function (result) {
     console.log("-------");
     console.log("Price!");
     console.log(JSON.stringify(result, null, 2));
-    console.log(result.result.Order.Products[0].descriptions[0].value);
+    console.log("A pizza with" + result.result.Order.Products[0].descriptions[0].value);
 });
 
 var cardNumber = '4100123422343234';
