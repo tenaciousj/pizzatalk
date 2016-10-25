@@ -9,7 +9,6 @@ var myCustomer = new pizzapi.Customer({
     email: 'paep3nguin@gmail.com'
 });
 
-
 var order = new pizzapi.Order({
     customer: myCustomer,
     //foster

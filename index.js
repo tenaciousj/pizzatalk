@@ -23,6 +23,34 @@ app.intent('TheUsual', {},
         return false;
     });
 
+app.dictionary = {'Gimme': ['I want', 'Get me', 'Order me', 'I would like', 'May I please have', 'If it pleases the court']};
+
+app.intent('OrderAPizza',
+	{
+		'slots': {'SIZE': 'PizzaSizes', 'TOPPING': 'PizzaToppings', 'QUANTITY': 'AMAZON.NUMBER'},
+		'utterances': ['{Gimme} {-|QUANTITY} {-|SIZE} {-|TOPPING} pizzas', '{Gimme} a {-|SIZE} {-|TOPPING} pizza']
+	},
+	function (request, response) {
+        var quantity = request.slot('QUANTITY');
+        if (quantity === '?') {
+            response.say("Sorry I don't understand");
+            return
+        } else if (quantity === '') {
+            quantity = 1;
+        } else {
+            quantity = parseInt(quantity);
+        }
+
+        for (var i = 0; i < quantity; i++) {
+        }
+
+        response.say("K, I'll order you " + request.slot('QUANTITY') + " " + request.slot('SIZE') + " " + request.slot('TOPPING') + " pizzas");
+    }
+);
+
+console.log(app.schema());
+console.log(app.utterances());
+
 // Export a handler function for Lambda to work with
 exports.handler = app.lambda();
 
