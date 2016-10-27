@@ -35,7 +35,7 @@ app.intent('OrderAPizza',
         if (quantity === '?') {
             response.say("Sorry I don't understand");
             return
-        } else if (quantity === '') {
+        } else if (quantity === undefined) {
             quantity = 1;
         } else {
             quantity = parseInt(quantity);
