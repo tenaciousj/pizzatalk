@@ -9,12 +9,20 @@ app.launch(function (request, response) {
     return false;
 });
 
-app.intent('TestIntent', {},
+app.dictionary = { 'Gimme': ['I want', 'Get me', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain'] };
+
+app.intent('TestIntent',
+    {
+        'utterances': ['hello world', 'say hello world', 'to say hello world']
+    },
     function (request, response) {
         response.say("Hello team pizza.");
     });
 
-app.intent('TheUsual', {},
+app.intent('TheUsual',
+    {
+        'utterances': ['{Gimme} the usual']
+    },
     function (request, response) {
         console.log("Starting usual");
         orderUsual(function (pizza) {
@@ -23,14 +31,12 @@ app.intent('TheUsual', {},
         return false;
     });
 
-app.dictionary = {'Gimme': ['I want', 'Get me', 'Order me', 'I would like', 'May I please have', 'If it pleases the court']};
-
 app.intent('OrderAPizza',
-	{
-		'slots': {'SIZE': 'PizzaSizes', 'TOPPING': 'PizzaToppings', 'QUANTITY': 'AMAZON.NUMBER'},
-		'utterances': ['{Gimme} {-|QUANTITY} {-|SIZE} {-|TOPPING} pizzas', '{Gimme} a {-|SIZE} {-|TOPPING} pizza']
-	},
-	function (request, response) {
+    {
+        'slots': { 'SIZE': 'PizzaSizes', 'TOPPING': 'PizzaToppings', 'QUANTITY': 'AMAZON.NUMBER' },
+        'utterances': ['{Gimme} {-|QUANTITY} {-|SIZE} {-|TOPPING} pizzas', '{Gimme} a {-|SIZE} {-|TOPPING} pizza']
+    },
+    function (request, response) {
         var quantity = request.slot('QUANTITY');
         if (quantity === '?') {
             response.say("Sorry I don't understand");
@@ -48,8 +54,8 @@ app.intent('OrderAPizza',
     }
 );
 
-console.log(app.schema());
-console.log(app.utterances());
+// console.log(app.schema());
+// console.log(app.utterances());
 
 orderUsual(function (pizza) {
     console.log(pizza);
