@@ -27,12 +27,35 @@ module.exports = function(grunt) {
             ]
         }]
       }
+    },
+    rename: {
+      start1: {
+        files: [{
+          src: ['node_modules'],
+          dest: ['fake_node_modules']
+        }]
+      },
+      start2: {
+        files: [{
+          src: ['real_node_modules'],
+          dest: ['node_modules']
+        }]
+      },
+      end1: {
+          src: ['node_modules'],
+          dest: ['real_node_modules']
+      },
+      end2: {
+          src: ['fake_node_modules'],
+          dest: ['node_modules']
+      }
     }
   });
 
   grunt.loadNpmTasks('grunt-aws');
   grunt.loadNpmTasks('grunt-beep');
+  grunt.loadNpmTasks('grunt-contrib-rename');
   grunt.loadNpmTasks('grunt-contrib-compress');
 
-  grunt.registerTask('default', ['compress:dist', 's3:dist', 'beep:2']);
+  grunt.registerTask('default', ['rename:start1', 'rename:start2', 'compress:dist', 's3:dist', 'beep:2']);
 };

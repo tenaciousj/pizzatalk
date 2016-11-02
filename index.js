@@ -11,12 +11,18 @@ app.launch(function (request, response) {
 
 app.dictionary = { 'Gimme': ['I want', 'Get me', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain'] };
 
+var yo = "yo mama";
+
 app.intent('TestIntent',
     {
         'utterances': ['hello world', 'say hello world', 'to say hello world']
     },
     function (request, response) {
-        response.say("Hello team pizza.");
+        if (yo) {
+            response.say(yo);
+        } else {
+            response.say("ugh");
+        }
     });
 
 app.intent('TheUsual',
