@@ -57,5 +57,5 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-contrib-rename');
   grunt.loadNpmTasks('grunt-contrib-compress');
 
-  grunt.registerTask('default', ['rename:start1', 'rename:start2', 'compress:dist', 's3:dist', 'beep:2']);
+  grunt.registerTask('default', ['rename:start1', 'rename:start2', 'compress:dist', 's3:dist', 'beep:2', 'rename:end1', 'rename:end2']);
 };
