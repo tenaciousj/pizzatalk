@@ -2,6 +2,8 @@ var alexa = require('alexa-app');
 var pizzapi = require('dominos');
 
 var app = new alexa.app('Pizza');
+// Export a handler function for Lambda to work with
+exports.handler = app.lambda();
 
 var STATE_START = "start";
 var STATE_CLARIFY = "clarify";
@@ -59,6 +61,7 @@ app.intent('GimmePizzaIntent', {
     var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_START) {
         response.say("I thought we were ready, want to start over?").shouldEndSession(false);
+        return;
     }
     var quantity = request.slot('QUANTITY');
     var size = request.slot('SIZE');
@@ -132,9 +135,6 @@ console.log(app.utterances());
 // orderUsual(function (pizza) {
 //     console.log(pizza);
 // });
-
-// Export a handler function for Lambda to work with
-exports.handler = app.lambda();
 
 function orderUsual(callback) {
     var fullAddress = new pizzapi.Address('2133 Sheridan Rd, Evanston, IL, 60201');
