@@ -2,7 +2,6 @@ var alexa = require('alexa-app');
 var pizzapi = require('dominos');
 
 var app = new alexa.app('Pizza');
-// Export a handler function for Lambda to work with
 exports.handler = app.lambda();
 
 var STATE_START = "start";
@@ -13,35 +12,47 @@ app.dictionary = {
     'Gimme': ['I want', 'Get me', 'Can I have', 'Can I get', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain']
 };
 
-var yo = "yo mama";
 var SESSION_INFO = "session_info";
-var default_session = {
+var DEFAULT_SESSION = {
     state: STATE_START,
     order: []
 };
 
+// This object automatically gets filled in with session info before every intent
+// Any changes to this object automatically get saved in the response
+var session;
+app.pre = function(request, response, type) {
+    // Don't end sessions by default
+    response.shouldEndSession(false);
+    // Fill in some session info if the session is undefined
+    session = request.session(SESSION_INFO) || JSON.parse(JSON.stringify(DEFAULT_SESSION));
+    response.session(SESSION_INFO, session);
+}
+
+// Default intent when a user starts the app with no utterance
+// Ex. "Alexa, talk to Pizza", "Alexa, open Pizza", "Alexa, start Pizza"
 app.launch(function (request, response) {
-    // Do nothing on launch
-    // In the future we can retrieve state here
-    return false;
+    response.say("Hello what would you like to order?");
 });
+
+app.sessionEnded(function(request, response) {
+    console.log("Session ended");
+});
+
+// Might wanna use at some point
+// https://developer.amazon.com/public/solutions/alexa/alexa-skills-kit/docs/implementing-the-built-in-intents
+// app.intent('AMAZON.CancelIntent');
+// app.intent('AMAZON.HelpIntent');
+// app.intent('AMAZON.YesIntent');
+// app.intent('AMAZON.NoIntent');
+// app.intent('AMAZON.RepeatIntent');
+// app.intent('AMAZON.StartOverIntent');
+// app.intent('AMAZON.StopIntent');
 
 app.intent('TestIntent', {
     'utterances': ['hello world', 'say hello world', 'to say hello world']
 }, function (request, response) {
-    if (yo) {
-        response.say(yo);
-    } else {
-        response.say("ugh");
-    }
-});
-
-app.intent('StartIntent', {
-    'utterances': ['Open pizza',
-        'Start pizza']
-}, function (request, response) {
-    var session = request.session(SESSION_INFO) || default_session;
-    response.say("Hello what would you like to order?");
+    response.say("yo").say(" mama");
 });
 
 app.intent('TheUsualIntent', {
@@ -67,16 +78,15 @@ app.intent('GimmePizzaIntent', {
         '{Gimme} {-|QUANTITY} {-|SIZE} {-|TOPPING} pizzas'
     ]
 }, function (request, response) {
-    var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_START) {
-        response.say("I thought we were ready, want to start over?").shouldEndSession(false);
+        response.say("I thought we were ready, want to start over?");
         return;
     }
     var quantity = request.slot('QUANTITY');
     var size = request.slot('SIZE');
     var topping = request.slot('TOPPING');
     if (quantity === '?') {
-        response.say("Sorry I don't understand, could you say that again?").shouldEndSession(false);
+        response.say("Sorry I don't understand, could you say that again?");
         return
     } else if (quantity === undefined) {
         quantity = 1;
@@ -87,14 +97,14 @@ app.intent('GimmePizzaIntent', {
     var multiple = quantity > 1;
 
     if (size === undefined) {
-        response.say("Got it, what size pizza" + (multiple ? 's' : '') + "  do you want?").shouldEndSession(false);
         session.state = STATE_CLARIFY;
+        response.say("Alright, what size pizza" + (multiple ? 's' : '') + "  do you want: small, medium, large, or extra large?");
         return;
     }
 
     if (topping === undefined) {
-        response.say("Got it, what toppings do you want on your pizza" + (multiple ? 's' : '') + "?").shouldEndSession(false);
         session.state = STATE_CLARIFY;
+        response.say("Got it, what toppings do you want on your pizza" + (multiple ? 's' : '') + "?");
         return;
     }
 
@@ -126,7 +136,6 @@ app.intent('QuantityIntent', {
     ]
 }, function (request, response) {
     // getQuantity(request, response);
-    var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
         return;
@@ -139,12 +148,12 @@ app.intent('SizeIntent', {
     'slots': { 'SIZE': 'PizzaSizes' },
     'utterances': [
         '{-|SIZE}',
-        '{Gimme} a {-|SIZE} pizza'
+        '{Gimme} {-|SIZE}'
     ]
 }, function (request, response) {
-    var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
+        return;
     }
 
     response.say("Sure thing" + request.slot('SIZE'));
@@ -154,25 +163,23 @@ app.intent('ToppingIntent', {
     'slots': { 'TOPPING': 'PizzaToppings' },
     'utterances': [
         '{-|TOPPING}',
+        '{-|TOPPING} and {-|TOPPING}',
+        '{-|TOPPING}, {-|TOPPING} and {-|TOPPING}',
         '{Gimme} {-|TOPPING}',
         '{Gimme} {-|TOPPING} and {-|TOPPING}',
         '{Gimme} {-|TOPPING}, {-|TOPPING} and {-|TOPPING}'
     ]
 }, function (request, response) {
-    var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
+        return;
     }
 
     response.say("Sure thing" + request.slot('TOPPING'));
 });
 
-console.log(app.schema());
-console.log(app.utterances());
-
-// orderUsual(function (pizza) {
-//     console.log(pizza);
-// });
+// console.log(app.schema());
+// console.log(app.utterances());
 
 function orderUsual(callback) {
     var fullAddress = new pizzapi.Address('2133 Sheridan Rd, Evanston, IL, 60201');
