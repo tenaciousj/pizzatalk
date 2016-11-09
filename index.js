@@ -36,6 +36,14 @@ app.intent('TestIntent', {
     }
 });
 
+app.intent('StartIntent', {
+    'utterances': ['Open pizza',
+        'Start pizza']
+}, function (request, response) {
+    var session = request.session(SESSION_INFO) || default_session;
+    response.say("Hello what would you like to order?");
+});
+
 app.intent('TheUsualIntent', {
     'utterances': ['{Gimme} the usual']
 }, function (request, response) {
@@ -49,6 +57,7 @@ app.intent('TheUsualIntent', {
 app.intent('GimmePizzaIntent', {
     'slots': { 'SIZE': 'PizzaSizes', 'TOPPING': 'PizzaToppings', 'QUANTITY': 'AMAZON.NUMBER' },
     'utterances': [
+        '{Gimme} a pizza',
         '{Gimme} a {-|SIZE} pizza',
         '{Gimme} a {-|TOPPING} pizza',
         '{Gimme} {-|QUANTITY} pizzas',
@@ -89,44 +98,73 @@ app.intent('GimmePizzaIntent', {
         return;
     }
 
-    response.say("K, I'll order you " + request.slot('QUANTITY') + " " + request.slot('SIZE') + " " + request.slot('TOPPING') + " pizzas");
+    if (size && topping && quantity) {
+        response.say("K, I'll order you " + request.slot('QUANTITY') + " " + request.slot('SIZE') + " " + request.slot('TOPPING') + " pizzas");
+    }
+
+    // if(typeof quantity === undefined){
+    // 	getQuantity(request, response);
+    // } else if(typeof topping === undefined){
+    // 	getTopping(request, response);
+    // } else if(typeof size === undefined){
+    // 	getSize(request, response);
+    // } else {
+    //     response.say("K, I'll order you " + request.slot('QUANTITY') + " " + request.slot('SIZE') + " " + request.slot('TOPPING') + " pizzas");
+    // }
+
 });
+
+// function getQuantity(request, response){
+// 	response.ask("How many pizzas would you like?");
+// }
 
 app.intent('QuantityIntent', {
     'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
-    'utterances': ['{-|QUANTITY}']
+    'utterances': [
+        '{-|QUANTITY}',
+        '{Gimme} {-|QUANTITY} pizza'
+    ]
 }, function (request, response) {
+    // getQuantity(request, response);
     var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
         return;
     }
 
-    response.say("Sure thing");
+    response.say("Sure thing" + request.slot('QUANTITY'));
 });
 
 app.intent('SizeIntent', {
     'slots': { 'SIZE': 'PizzaSizes' },
-    'utterances': ['{-|SIZE}']
+    'utterances': [
+        '{-|SIZE}',
+        '{Gimme} a {-|SIZE} pizza'
+    ]
 }, function (request, response) {
     var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
     }
 
-    response.say("Sure thing");
+    response.say("Sure thing" + request.slot('SIZE'));
 });
 
 app.intent('ToppingIntent', {
     'slots': { 'TOPPING': 'PizzaToppings' },
-    'utterances': ['{-|TOPPING}']
+    'utterances': [
+        '{-|TOPPING}',
+        '{Gimme} {-|TOPPING}',
+        '{Gimme} {-|TOPPING} and {-|TOPPING}',
+        '{Gimme} {-|TOPPING}, {-|TOPPING} and {-|TOPPING}'
+    ]
 }, function (request, response) {
     var session = request.session(SESSION_INFO) || default_session;
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
     }
 
-    response.say("Sure thing");
+    response.say("Sure thing" + request.slot('TOPPING'));
 });
 
 console.log(app.schema());
