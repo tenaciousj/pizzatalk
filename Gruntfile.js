@@ -17,7 +17,8 @@ module.exports = function(grunt) {
         options: {
             stderr: false
         },
-        dist: 'jar uvf dist.zip index.js'
+        dist: 'jar uvf dist.zip index.js codes.js',
+        genConvModel: 'node writeConversationalModel.js'
     }
   });
 
@@ -26,5 +27,5 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-shell');
   grunt.loadNpmTasks('grunt-contrib-compress');
 
-  grunt.registerTask('default', ['shell:dist', 's3:dist', 'beep:2']);
+  grunt.registerTask('default', ['shell:genConvModel', 'shell:dist', 's3:dist', 'beep:2']);
 };

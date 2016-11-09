@@ -1,14 +1,18 @@
 var alexa = require('alexa-app');
 var pizzapi = require('dominos');
+var codes = require('./codes');
 
 var app = new alexa.app('Pizza');
-exports.handler = app.lambda();
 
 var STATE_START = "start";
 var STATE_CLARIFY = "clarify";
+var STATE_ADD_MORE = "add more";
 var STATE_CHECKOUT = "checkout";
 
 app.dictionary = {
+    'quantity_s': ['{-|QUANTITY}', '{-|QUANTITY_WORD}'],
+    'pizza_s': ['pizza', 'pizzas'],
+    'topping_s': ['{-|TOPPING}', '{-|TOPPING} and {-|TOPPING_B}', '{-|TOPPING} {-|TOPPING_B} and {-|TOPPING_C}'],
     'Gimme': ['I want', 'Get me', 'Can I have', 'Can I get', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain']
 };
 
@@ -21,7 +25,7 @@ var DEFAULT_SESSION = {
 // This object automatically gets filled in with session info before every intent
 // Any changes to this object automatically get saved in the response
 var session;
-app.pre = function(request, response, type) {
+app.pre = function (request, response, type) {
     // Don't end sessions by default
     response.shouldEndSession(false);
     // Fill in some session info if the session is undefined
@@ -35,7 +39,7 @@ app.launch(function (request, response) {
     response.say("Hello what would you like to order?");
 });
 
-app.sessionEnded(function(request, response) {
+app.sessionEnded(function (request, response) {
     console.log("Session ended");
 });
 
@@ -43,8 +47,6 @@ app.sessionEnded(function(request, response) {
 // https://developer.amazon.com/public/solutions/alexa/alexa-skills-kit/docs/implementing-the-built-in-intents
 // app.intent('AMAZON.CancelIntent');
 // app.intent('AMAZON.HelpIntent');
-// app.intent('AMAZON.YesIntent');
-// app.intent('AMAZON.NoIntent');
 // app.intent('AMAZON.RepeatIntent');
 // app.intent('AMAZON.StartOverIntent');
 // app.intent('AMAZON.StopIntent');
@@ -52,7 +54,7 @@ app.sessionEnded(function(request, response) {
 app.intent('TestIntent', {
     'utterances': ['hello world', 'say hello world', 'to say hello world']
 }, function (request, response) {
-    response.say("yo").say(" mama");
+    response.say("yo").say(" mama").say(" " + codes.lol);
 });
 
 app.intent('TheUsualIntent', {
@@ -65,85 +67,67 @@ app.intent('TheUsualIntent', {
     return false;
 });
 
+// A fully-formed sentence requesting pizza with any or none of quantity, size, or toppings
 app.intent('GimmePizzaIntent', {
-    'slots': { 'SIZE': 'PizzaSizes', 'TOPPING': 'PizzaToppings', 'QUANTITY': 'AMAZON.NUMBER' },
+    'slots': { 'SIZE': 'PizzaSizes', 'TOPPING': 'PizzaToppings', 'TOPPING_B': 'PizzaToppings', 'TOPPING_C': 'PizzaToppings', 'QUANTITY': 'AMAZON.NUMBER', 'QUANTITY_WORD': 'QuantityWords' },
     'utterances': [
-        '{Gimme} a pizza',
-        '{Gimme} a {-|SIZE} pizza',
-        '{Gimme} a {-|TOPPING} pizza',
-        '{Gimme} {-|QUANTITY} pizzas',
-        '{Gimme} {-|QUANTITY} {-|SIZE} pizzas',
-        '{Gimme} {-|QUANTITY} {-|TOPPING} pizzas',
-        '{Gimme} a {-|SIZE} {-|TOPPING} pizza',
-        '{Gimme} {-|QUANTITY} {-|SIZE} {-|TOPPING} pizzas'
+        '{Gimme} {quantity_s} {pizza_s}',
+        '{Gimme} {quantity_s} {-|SIZE} {pizza_s}',
+        '{Gimme} {quantity_s} {topping_s} {pizza_s}',
+        '{Gimme} {quantity_s} {-|SIZE} {topping_s} {pizza_s}',
     ]
 }, function (request, response) {
-    if (session.state !== STATE_START) {
+    console.log('GimmePizzaIntent');
+    if (session.state === STATE_CLARIFY) {
         response.say("I thought we were ready, want to start over?");
         return;
     }
-    var quantity = request.slot('QUANTITY');
-    var size = request.slot('SIZE');
-    var topping = request.slot('TOPPING');
-    if (quantity === '?') {
-        response.say("Sorry I don't understand, could you say that again?");
-        return
-    } else if (quantity === undefined) {
-        quantity = 1;
-    } else {
-        quantity = parseInt(quantity);
-    }
 
-    var multiple = quantity > 1;
+    var pizza = {};
 
-    if (size === undefined) {
-        session.state = STATE_CLARIFY;
-        response.say("Alright, what size pizza" + (multiple ? 's' : '') + "  do you want: small, medium, large, or extra large?");
-        return;
-    }
+    addQuantityToPizza(request, pizza);
+    addSizeToPizza(request, pizza);
+    addToppingsToPizza(request, pizza);
 
-    if (topping === undefined) {
-        session.state = STATE_CLARIFY;
-        response.say("Got it, what toppings do you want on your pizza" + (multiple ? 's' : '') + "?");
-        return;
-    }
-
-    if (size && topping && quantity) {
-        response.say("K, I'll order you " + request.slot('QUANTITY') + " " + request.slot('SIZE') + " " + request.slot('TOPPING') + " pizzas");
-    }
-
-    // if(typeof quantity === undefined){
-    // 	getQuantity(request, response);
-    // } else if(typeof topping === undefined){
-    // 	getTopping(request, response);
-    // } else if(typeof size === undefined){
-    // 	getSize(request, response);
-    // } else {
-    //     response.say("K, I'll order you " + request.slot('QUANTITY') + " " + request.slot('SIZE') + " " + request.slot('TOPPING') + " pizzas");
-    // }
-
+    handlePizzaInput(request, response, pizza);
 });
 
-// function getQuantity(request, response){
-// 	response.ask("How many pizzas would you like?");
-// }
+// User says yes
+app.intent('AMAZON.YesIntent', {}, function (request, response) {
+    console.log('AMAZON.YesIntent');
+    if (session.state === STATE_ADD_MORE) {
+        response.say("Great, what else do you want?");
+        session.state = STATE_START;
+    }
+});
 
+// User says no
+app.intent('AMAZON.NoIntent', {}, function (request, response) {
+    console.log('AMAZON.NoIntent');
+    if (session.state === STATE_ADD_MORE) {
+        response.say("No problem");
+        // TODO: start checkout flow here
+    }
+});
+
+// A quantity in response to a clarification prompt
 app.intent('QuantityIntent', {
     'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
     'utterances': [
         '{-|QUANTITY}',
-        '{Gimme} {-|QUANTITY} pizza'
+        '{Gimme} {-|QUANTITY} {pizza_s}'
     ]
 }, function (request, response) {
-    // getQuantity(request, response);
+    console.log('QuantityIntent');
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
         return;
     }
 
-    response.say("Sure thing" + request.slot('QUANTITY'));
+    handlePizzaInput(request, response, addQuantityToPizza(request, {}));
 });
 
+// A size in response to a clarification prompt
 app.intent('SizeIntent', {
     'slots': { 'SIZE': 'PizzaSizes' },
     'utterances': [
@@ -151,35 +135,123 @@ app.intent('SizeIntent', {
         '{Gimme} {-|SIZE}'
     ]
 }, function (request, response) {
+    console.log('SizeIntent');
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
         return;
     }
 
-    response.say("Sure thing" + request.slot('SIZE'));
+    handlePizzaInput(request, response, addSizeToPizza(request, {}));
 });
 
+// Toppings in response to a clarification prompt
 app.intent('ToppingIntent', {
-    'slots': { 'TOPPING': 'PizzaToppings' },
+    'slots': { 'TOPPING': 'PizzaToppings', 'TOPPING_B': 'PizzaToppings', 'TOPPING_C': 'PizzaToppings' },
     'utterances': [
-        '{-|TOPPING}',
-        '{-|TOPPING} and {-|TOPPING}',
-        '{-|TOPPING}, {-|TOPPING} and {-|TOPPING}',
-        '{Gimme} {-|TOPPING}',
-        '{Gimme} {-|TOPPING} and {-|TOPPING}',
-        '{Gimme} {-|TOPPING}, {-|TOPPING} and {-|TOPPING}'
+        '{topping_s}',
+        '{Gimme} {topping_s}',
     ]
 }, function (request, response) {
+    console.log('ToppingIntent');
     if (session.state !== STATE_CLARIFY) {
         response.say("Wtf do you want");
         return;
     }
 
-    response.say("Sure thing" + request.slot('TOPPING'));
+    handlePizzaInput(request, response, addToppingsToPizza(request, {}));
 });
 
-// console.log(app.schema());
-// console.log(app.utterances());
+// TODO: Better error handling for unrecognizable quantities
+// Augment a pizza object with quantity data
+function addQuantityToPizza(request, pizza) {
+    console.log("addQuantityToPizza");
+    var quantity = request.slot('QUANTITY');
+
+    var pizzaCount;
+
+    if (quantity) {
+        if (quantity === '?') {
+            return pizza;
+        } else {
+            pizzaCount = parseInt(quantity);
+        }
+    } else {
+        var quantityWord = request.slot('QUANTITY_WORD');
+        if (quantityWord !== undefined) {
+            if (quantityWord === "a") {
+                pizzaCount = 1;
+            } else {
+                // Unable to determine number of pizzas
+                return pizza;
+            }
+        }
+    }
+
+    pizza.quantity = pizzaCount;
+    pizza.plural = pizzaCount > 1 ? 's' : '';
+
+    return pizza;
+}
+
+// Augment a pizza object with a size
+function addSizeToPizza(request, pizza) {
+    console.log("addSizeToPizza");
+    var size = request.slot('SIZE');
+    if (size !== undefined) {
+        pizza.size = size;
+    }
+    return pizza;
+}
+
+// Augment a pizza object with toppings
+function addToppingsToPizza(request, pizza) {
+    console.log('addToppingsToPizza');
+    var toppingA = request.slot('TOPPING');
+    var toppingB = request.slot('TOPPING_B');
+    var toppingC = request.slot('TOPPING_C');
+    if (toppingA !== undefined) {
+        var toppings = [toppingA];
+        if (toppingB !== undefined) {
+            toppings.push(toppingB);
+        }
+        if (toppingC !== undefined) {
+            toppings.push(toppingC);
+        }
+        pizza.toppings = toppings;
+    }
+    return pizza;
+}
+
+// Given a pizza object and a state, figure out what to ask for next
+function handlePizzaInput(request, response, input) {
+    console.log('handlePizzaInput ' + session.state);
+    // TODO: use a more well-defined pizza object
+    var pizza;
+    if (session.state === STATE_START) {
+        pizza = input;
+    } else if (session.state === STATE_CLARIFY) {
+        pizza = session.order.pop();
+        Object.assign(pizza, input);
+    }
+
+    if (pizza.quantity === undefined) {
+        session.state = STATE_CLARIFY;
+        response.say("Sounds good, how many pizzas do you want?");
+    } else if (pizza.size === undefined) {
+        session.state = STATE_CLARIFY;
+        response.say("Alright, what size pizza" + (pizza.plural ? 's' : '') + "  do you want: small, medium, large, or extra large?");
+    } else if (pizza.toppings === undefined) {
+        session.state = STATE_CLARIFY;
+        response.say("Got it, what toppings do you want on your pizza" + (pizza.plural ? 's' : '') + "?");
+    } else {
+        session.state = STATE_ADD_MORE;
+        response.say("K, I'll add " + pizza.quantity + " " + pizza.size + " "
+            + joinAnd(pizza.toppings) + " pizza" + pizza.plural
+            + " to your order. Do you want to add another pizza?");
+    }
+
+    session.order.push(pizza);
+}
 
 function orderUsual(callback) {
     var fullAddress = new pizzapi.Address('2133 Sheridan Rd, Evanston, IL, 60201');
@@ -284,4 +356,10 @@ function joinAnd(strings) {
     }
     joined += 'and ' + strings[strings.length - 1];
     return joined;
+}
+
+module.exports = {
+    handler: app.lambda(),
+    schema: app.schema(),
+    utterances: app.utterances()
 }
