@@ -5,6 +5,7 @@ var codes = require('./codes');
 var app = new alexa.app('Pizza');
 
 var STATE_START = "start";
+var STATE_PARTY = "party";
 var STATE_CLARIFY = "clarify";
 var STATE_ADD_MORE = "add more";
 var STATE_CHECKOUT = "checkout";
@@ -13,7 +14,7 @@ app.dictionary = {
     'quantity_s': ['{-|QUANTITY}', '{-|QUANTITY_WORD}'],
     'pizza_s': ['pizza', 'pizzas'],
     'topping_s': ['{-|TOPPING}', '{-|TOPPING} and {-|TOPPING_B}', '{-|TOPPING} {-|TOPPING_B} and {-|TOPPING_C}'],
-    'Gimme': ['I want', 'Get me', 'Can I have', 'Can I get', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain']
+    'Gimme': ['I want', 'I need', 'Get me', 'Can I have', 'Can I get', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain']
 };
 
 var SESSION_INFO = "session_info";
@@ -33,12 +34,6 @@ app.pre = function (request, response, type) {
     response.session(SESSION_INFO, session);
 }
 
-// Default intent when a user starts the app with no utterance
-// Ex. "Alexa, talk to Pizza", "Alexa, open Pizza", "Alexa, start Pizza"
-app.launch(function (request, response) {
-    response.say("Hello what would you like to order?");
-});
-
 app.sessionEnded(function (request, response) {
     console.log("Session ended");
 });
@@ -57,6 +52,24 @@ app.intent('TestIntent', {
     response.say("yo").say(" mama").say(" " + codes.lol);
 });
 
+// Default intent when a user starts the app with no utterance
+// Ex. "Alexa, talk to Pizza", "Alexa, open Pizza", "Alexa, start Pizza"
+app.launch(handleDefaultIntent);
+
+app.intent('StartIntent', {
+    'utterances': ["I'm hungry", "{Gimme} pizza"]
+}, handleDefaultIntent);
+
+function handleDefaultIntent(request, response) {
+    console.log("DefaultIntent");
+    response.say("What kind of pizza do you want?");
+}
+
+app.intent('AMAZON.StopIntent', {}, function (request, response) {
+    console.log("StopIntent");
+    response.say("Fine, bye").shouldEndSession(true);
+});
+
 app.intent('TheUsualIntent', {
     'utterances': ['{Gimme} the usual']
 }, function (request, response) {
@@ -65,6 +78,18 @@ app.intent('TheUsualIntent', {
         response.say("I ordered your favorite, " + pizza).send();
     });
     return false;
+});
+
+app.intent('PartyIntent', {
+    'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
+    'utterances': [
+        "I'm having a party",
+        "I'm having friends over",
+        "{Gimme} {pizza_s} for {-|QUANTITY} people",
+        "{Gimme} {pizza_s} for a party of {-|QUANTITY}",
+    ]
+}, function (request, response) {
+    console.log('PartyIntent');
 });
 
 // A fully-formed sentence requesting pizza with any or none of quantity, size, or toppings
@@ -115,7 +140,6 @@ app.intent('QuantityIntent', {
     'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
     'utterances': [
         '{-|QUANTITY}',
-        '{Gimme} {-|QUANTITY} {pizza_s}'
     ]
 }, function (request, response) {
     console.log('QuantityIntent');
@@ -132,7 +156,6 @@ app.intent('SizeIntent', {
     'slots': { 'SIZE': 'PizzaSizes' },
     'utterances': [
         '{-|SIZE}',
-        '{Gimme} {-|SIZE}'
     ]
 }, function (request, response) {
     console.log('SizeIntent');
@@ -149,7 +172,6 @@ app.intent('ToppingIntent', {
     'slots': { 'TOPPING': 'PizzaToppings', 'TOPPING_B': 'PizzaToppings', 'TOPPING_C': 'PizzaToppings' },
     'utterances': [
         '{topping_s}',
-        '{Gimme} {topping_s}',
     ]
 }, function (request, response) {
     console.log('ToppingIntent');
