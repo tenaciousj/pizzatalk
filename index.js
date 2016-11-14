@@ -13,6 +13,8 @@ var STATE_CHECKOUT = "checkout";
 app.dictionary = {
     'quantity_s': ['{-|QUANTITY}', '{-|QUANTITY_WORD}'],
     'pizza_s': ['pizza', 'pizzas'],
+    'party': ['rager', 'banger', 'party', 'get-together', 'celebration'],
+    'party_verb': ['turn up', 'rage', 'get lit', 'have a good time'],
     'topping_s': ['{-|TOPPING}', '{-|TOPPING} and {-|TOPPING_B}', '{-|TOPPING} {-|TOPPING_B} and {-|TOPPING_C}'],
     'Gimme': ['I want', 'I need', 'Get me', 'Can I have', 'Can I get', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain']
 };
@@ -83,13 +85,23 @@ app.intent('TheUsualIntent', {
 app.intent('PartyIntent', {
     'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
     'utterances': [
-        "I'm having a party",
+        "I'm having a {party}",
+        "I'm throwing a {party}",
+        "I'm trying to {party_verb}",
+        "I'm having people over",
         "I'm having friends over",
+        "It's gonna be lit in here",
+        "How many pizzas should I get for a {party}",
+        "How many pizzas should I get for a {party} of {-|QUANTITY}",
+        "I'm having {-|QUANTITY} people over",
+        "I'm having {-|QUANTITY} friends over",
         "{Gimme} {pizza_s} for {-|QUANTITY} people",
-        "{Gimme} {pizza_s} for a party of {-|QUANTITY}",
+        "{Gimme} {pizza_s} for a {party} of {-|QUANTITY}",
     ]
 }, function (request, response) {
     console.log('PartyIntent');
+    response.say("How many pizzas do you want?");
+    session.state = STATE_PARTY;
 });
 
 // A fully-formed sentence requesting pizza with any or none of quantity, size, or toppings
