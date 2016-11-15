@@ -100,7 +100,12 @@ app.intent('PartyIntent', {
     ]
 }, function (request, response) {
     console.log('PartyIntent');
-    response.say("How many pizzas do you want?");
+    var partySize = request.slot('QUANTITY');
+    if (partSize === undefined) {
+        response.say("How many pizzas do you want?");
+    } else {
+
+    }
     session.state = STATE_PARTY;
 });
 
