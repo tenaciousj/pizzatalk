@@ -83,7 +83,7 @@ app.intent('TheUsualIntent', {
 });
 
 app.intent('PartyIntent', {
-    'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
+    'slots': { 'NUM_PEOPLE': 'AMAZON.NUMBER' },
     'utterances': [
         "I'm having a {party}",
         "I'm throwing a {party}",
@@ -92,20 +92,34 @@ app.intent('PartyIntent', {
         "I'm having friends over",
         "It's gonna be lit in here",
         "How many pizzas should I get for a {party}",
-        "How many pizzas should I get for a {party} of {-|QUANTITY}",
-        "I'm having {-|QUANTITY} people over",
-        "I'm having {-|QUANTITY} friends over",
-        "{Gimme} {pizza_s} for {-|QUANTITY} people",
-        "{Gimme} {pizza_s} for a {party} of {-|QUANTITY}",
+        "How many pizzas should I get for a {party} of {-|NUM_PEOPLE}",
+        "I'm having {-|NUM_PEOPLE} people over",
+        "I'm having {-|NUM_PEOPLE} friends over",
+        "{Gimme} {pizza_s} for {-|NUM_PEOPLE} people",
+        "{Gimme} {pizza_s} for a {party} of {-|NUM_PEOPLE}",
     ]
 }, function (request, response) {
     console.log('PartyIntent');
-    var partySize = request.slot('QUANTITY');
-    if (partSize === undefined) {
-        response.say("How many pizzas do you want?");
-    } else {
-
+    var partySize = request.slot('NUM_PEOPLE');
+    if (partySize === undefined) {
+        response.say("Awesome, how many people are coming?");
+        session.state = STATE_PARTY_QTY;
     }
+
+    var pizza = {};
+    var order; 
+
+    calculatePartyPizzas(request, pizza)
+    pizza.size = "medium";
+    if(pizza.quantity && pizza.quantity < 5)
+    {
+    	handlePizzaInput(request, response, pizza);
+    }
+    else
+    {
+    	calculatePartyOrder(request, pizza, order)
+    }
+
     session.state = STATE_PARTY;
 });
 
@@ -160,11 +174,12 @@ app.intent('QuantityIntent', {
     ]
 }, function (request, response) {
     console.log('QuantityIntent');
-    if (session.state !== STATE_CLARIFY) {
-        response.say("Wtf do you want");
+    if (session.state == STATE_CLARIFY) {
+        handlePizzaInput(request, response, addQuantityToPizza(request, {}));
+        return;
+    } else if (session.state == STATE_PARTY_QTY) {
         return;
     }
-
     handlePizzaInput(request, response, addQuantityToPizza(request, {}));
 });
 
@@ -290,6 +305,53 @@ function handlePizzaInput(request, response, input) {
     }
 
     session.order.push(pizza);
+}
+
+function calculatePartyPizzas(request, pizza) {
+	console.log('Calculate Pizza Quantity')
+    
+    var numPeople = request.slot('NUM_PEOPLE');
+    var pizzaCount;
+
+    if (numPeople) {
+        if (numPeople === '?') {
+            return pizza;
+        } else {
+            pizzaCount = Math.ceil(parseInt(numPeople) * 3.0 / 8.0);
+        }
+    }
+
+    pizza.quantity = pizzaCount;
+    pizza.plural = pizzaCount > 1 ? 's' : '';
+
+    return pizza;
+}
+
+function calculatePartyOrder(request, pizza) {
+	if(!pizza.quantity)
+	{
+		return pizza;
+	}
+
+	var numCheese = Math.ceil(pizza.quantity / 3.0)
+	var numPepperoni = Math.round(pizza.quantity / 3.0)
+	var numSausage = Math.floor(pizza.quantity / 3.0)
+
+	session.order = [{
+		size: pizza.size,
+		toppings: ["cheese"],
+		quantity: numCheese
+	},
+	{
+		size: pizza.size,
+		toppings: ["pepperoni"],
+		quantity: numPepperoni
+	},
+	{
+		size: pizza.size,
+		toppings: ["sausage"],
+		quantity: numSausage
+	}]
 }
 
 function orderUsual(callback) {
