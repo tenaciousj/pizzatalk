@@ -4,13 +4,6 @@ var codes = require('./codes');
 
 var app = new alexa.app('Pizza');
 
-var STATE_START = "start";
-var STATE_CLARIFY = "clarify";
-var STATE_ADD_MORE = "add more";
-var STATE_CHECKOUT = "checkout";
-var STATE_PARTY = "party";
-var STATE_PARTY_QTY = "party quantity";
-
 app.dictionary = {
     'quantity_s': ['{-|QUANTITY}', '{-|QUANTITY_WORD}'],
     'pizza_s': ['pizza', 'pizzas'],
@@ -20,16 +13,22 @@ app.dictionary = {
     'Gimme': ['I want', 'I need', 'Get me', 'Can I have', 'Can I get', 'Order me', 'I would like', 'May I please have', 'May it please the court to obtain']
 };
 
-var SESSION_INFO = "session_info";
-var DEFAULT_SESSION = {
-    state: STATE_START,
-    order: []
-};
-
 // This object automatically gets filled in with session info before every intent
 // Any changes to this object automatically get saved in the response
 var session;
-app.pre = function (request, response, type) {
+var SESSION_INFO = "session_info";
+var DEFAULT_SESSION = {
+    // Current state
+    state: "start",
+    // Current order details, stored as array of objects with quantity, size, topping
+    order: [],
+    // Question we're asking the user
+    prompt: "",
+    last_prompt: "You can tell me what pizza you want or that you're having a party"
+};
+
+// Runs before every request
+app.pre = function(request, response) {
     // Don't end sessions by default
     response.shouldEndSession(false);
     // Fill in some session info if the session is undefined
@@ -37,53 +36,235 @@ app.pre = function (request, response, type) {
     response.session(SESSION_INFO, session);
 }
 
-app.sessionEnded(function (request, response) {
+// Runs after every request, reprompt if reprompt message specified
+app.post = function(request, response) {
+    var prompt = session.prompt;
+    if (prompt) {
+        response.say(prompt).reprompt("Hey, " + prompt);
+    }
+    session.last_prompt = prompt;
+    session.prompt = "";
+}
+
+app.sessionEnded(function(request, response) {
     console.log("Session ended");
 });
 
+// Possible states for the skill
+// Each state corresponds to a time when the skill is waiting for user input
+// Each state may allow multiple intents
+var STATE_START = "start";
+var STATE_PARTY_QTY = "partyQty";
+var STATE_PIZZA_QTY = "pizzaQty";
+var STATE_CONFIRM_PIZZA_QTY = "confirmPizzaQty";
+var STATE_PIZZA_SIZE = "pizzaSize";
+var STATE_PIZZA_TOPPING = "pizzaTopping";
+var STATE_CONFIRM_TOPPING = "confirmTopping";
+var STATE_ADD_MORE = "addMore";
+var STATE_CONFIRM_CHECKOUT = "confirmCheckout";
+
+// Intents defined
+var START_INTENT = 'StartIntent';
+var TEST_INTENT = 'TestIntent';
+var USUAL_INTENT = 'TheUsualIntent';
+var PARTY_INTENT = 'PartyIntent';
+var GIMME_PIZZA_INTENT = 'GimmePizzaIntent';
+var QUANTITY_INTENT = 'QuantityIntent';
+var SIZE_INTENT = 'SizeIntent';
+var TOPPING_INTENT = 'ToppingIntent';
+var YES_INTENT = 'AMAZON.YesIntent';
+var NO_INTENT = 'AMAZON.NoIntent';
+var STOP_INTENT = 'AMAZON.StopIntent';
+
 // Might wanna use at some point
 // https://developer.amazon.com/public/solutions/alexa/alexa-skills-kit/docs/implementing-the-built-in-intents
-// app.intent('AMAZON.CancelIntent');
-// app.intent('AMAZON.HelpIntent');
-// app.intent('AMAZON.RepeatIntent');
-// app.intent('AMAZON.StartOverIntent');
+// AMAZON.CancelIntent
+// AMAZON.HelpIntent
+// AMAZON.RepeatIntent
+// AMAZON.StartOverIntent
 
-app.intent('TestIntent', {
-    'utterances': ['hello world', 'say hello world', 'to say hello world']
-}, function (request, response) {
-    response.say("yo").say(" mama").say(" " + codes.lol);
-});
+// Mapping from state name to state handler function
+// State handlers must return RESULT_ASYNC, RESULT_BAD_INTENT, or undefined
+var STATE_HANDLERS = {
+    [STATE_START]: handleStart,
+    [STATE_PARTY_QTY]: handlePartyQty,
+    [STATE_PIZZA_QTY]: handlePizzaInfo,
+    [STATE_CONFIRM_PIZZA_QTY]: handleConfirmPizzaQty,
+    [STATE_PIZZA_SIZE]: handlePizzaInfo,
+    [STATE_PIZZA_TOPPING]: handlePizzaInfo,
+    [STATE_CONFIRM_TOPPING]: handleToppingConfirmation,
+    [STATE_ADD_MORE]: handleAddMore,
+    [STATE_CONFIRM_CHECKOUT]: handleConfirmCheckout,
+};
+
+var RESULT_ASYNC = "async";
+var RESULT_BAD_INTENT = "wut";
+
+// Routes intents to the current state handler
+function router(request, response) {
+    var intent = request.data.request.intent.name;
+    console.log("Routed: " + session.state + ", " + intent);
+    if (intent === STOP_INTENT) {
+        response.say("Fine, bye").shouldEndSession(true);
+        return;
+    }
+    // Call the appropriate state handler
+    switch (STATE_HANDLERS[session.state](request, response, intent)) {
+        case RESULT_BAD_INTENT:
+            response.say("Hey, ");
+            session.prompt = session.last_prompt;
+            break;
+        case RESULT_ASYNC:
+            return false;
+        default:
+    }
+}
+
+function handleStart(request, response, intent) {
+    switch (intent) {
+        case TEST_INTENT:
+            response.say("yo").say(" mama").say(" " + codes.lol);
+            break;
+        case PARTY_INTENT:
+            session.state = handlePartyIntent(request, response);
+            break;
+        case GIMME_PIZZA_INTENT:
+            var pizza = {};
+            pizza = addQuantityToPizza(request, pizza);
+            pizza = addSizeToPizza(request, pizza);
+            pizza = addToppingsToPizza(request, pizza);
+
+            session.state = getNextPizzaState(request, response, pizza);
+            break;
+        case USUAL_INTENT:
+            orderUsual(function(description) {
+                response.say("I ordered your favorite, " + description).send();
+            });
+            return RESULT_ASYNC;
+        case START_INTENT:
+        default:
+            return RESULT_BAD_INTENT;
+    }
+}
+
+function handlePartyQty(request, response, intent) {
+    switch (intent) {
+        case QUANTITY_INTENT:
+            session.state = handlePartyIntent(request, response);
+            break;
+        default:
+            return RESULT_BAD_INTENT;
+    }
+}
+
+function handlePizzaInfo(request, response, intent) {
+    var pizza = session.order.pop();
+    switch (intent) {
+        case QUANTITY_INTENT:
+            pizza = addQuantityToPizza(request, pizza);
+            break;
+        case SIZE_INTENT:
+            pizza = addSizeToPizza(request, pizza);
+            break;
+        case TOPPING_INTENT:
+            pizza = addToppingsToPizza(request, pizza);
+            break;
+        default:
+            session.order.push(pizza);
+            return RESULT_BAD_INTENT;
+    }
+    session.state = getNextPizzaState(request, response, pizza);
+}
+
+function handleConfirmPizzaQty(request, response, intent) {
+    var pizza = session.order.pop();
+    switch (intent) {
+        case YES_INTENT:
+            response.say("Great! ");
+            session.state = getNextPizzaState(request, response, pizza);
+            break;
+        case NO_INTENT:
+            response.say("No problem, ");
+            session.prompt = "how many pizzas do you want?";
+            pizza.quantity = undefined;
+            order = [pizza];
+            session.state = STATE_PIZZA_QTY;
+            break;
+        default:
+            session.order.push(pizza);
+            return RESULT_BAD_INTENT;
+    }
+}
+
+function handleToppingConfirmation(request, response, intent) {
+    var pizza = session.order.pop();
+    switch (intent) {
+        case YES_INTENT:
+            session.order = createPartyOrder(pizza.quantity, pizza.size);
+            session.state = finishOrder(response, pizza);
+            break;
+        case NO_INTENT:
+            pizza.accepted_suggestion = false;
+            session.state = getNextPizzaState(request, response, pizza);
+            break;
+        default:
+            session.order.push(pizza);
+            return RESULT_BAD_INTENT;
+    }
+}
+
+function handleAddMore(request, response, intent) {
+    switch (intent) {
+        case YES_INTENT:
+            response.say("Great, ");
+            session.prompt = "what else do you want?";
+            session.state = STATE_START;
+            break;
+        case NO_INTENT:
+            checkout(request, response);
+            return RESULT_ASYNC;
+        default:
+            return RESULT_BAD_INTENT;
+    }
+}
+
+function handleConfirmCheckout(request, response, intent) {
+    switch (intent) {
+        case YES_INTENT:
+            var order = createOrderFromPizzas(session.order);
+            placeOrder(order, function(description) {
+                response.say("Great, I ordered " + description + ". Enjoy!")
+                    .shouldEndSession(true).send();
+            });
+            return RESULT_ASYNC;
+        case NO_INTENT:
+            session.state = STATE_START;
+            response.say("Alright, well what would you like?");
+            session.order = [];
+            break;
+        default:
+            return RESULT_BAD_INTENT;
+    }
+}
 
 // Default intent when a user starts the app with no utterance
 // Ex. "Alexa, talk to Pizza", "Alexa, open Pizza", "Alexa, start Pizza"
-app.launch(handleDefaultIntent);
+app.launch(handleStart);
 
-app.intent('StartIntent', {
+app.intent(START_INTENT, {
     'utterances': ["I'm hungry", "{Gimme} pizza"]
-}, handleDefaultIntent);
+}, router);
 
-function handleDefaultIntent(request, response) {
-    console.log("DefaultIntent");
-    response.say("What kind of pizza do you want?");
-}
+app.intent(TEST_INTENT, {
+    'utterances': ['hello world', 'say hello world', 'to say hello world']
+}, router);
 
-app.intent('AMAZON.StopIntent', {}, function (request, response) {
-    console.log("StopIntent");
-    response.say("Fine, bye").shouldEndSession(true);
-});
-
-app.intent('TheUsualIntent', {
+app.intent(USUAL_INTENT, {
     'utterances': ['{Gimme} the usual']
-}, function (request, response) {
-    console.log("Starting usual");
-    orderUsual(function (description) {
-        response.say("I ordered your favorite, " + description).send();
-    });
-    return false;
-});
+}, router);
 
-app.intent('PartyIntent', {
-    'slots': { 'NUM_PEOPLE': 'AMAZON.NUMBER' },
+app.intent(PARTY_INTENT, {
+    'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
     'utterances': [
         "I'm having a {party}",
         "I'm throwing a {party}",
@@ -92,145 +273,113 @@ app.intent('PartyIntent', {
         "I'm having friends over",
         "It's gonna be lit in here",
         "How many pizzas should I get for a {party}",
-        "How many pizzas should I get for a {party} of {-|NUM_PEOPLE}",
-        "I'm having {-|NUM_PEOPLE} people over",
-        "I'm having {-|NUM_PEOPLE} friends over",
-        "{Gimme} {pizza_s} for {-|NUM_PEOPLE} people",
-        "{Gimme} {pizza_s} for a {party} of {-|NUM_PEOPLE}",
+        "How many pizzas should I get for a {party} of {-|QUANTITY}",
+        "I'm having {-|QUANTITY} people over",
+        "I'm having {-|QUANTITY} friends over",
+        "{Gimme} {pizza_s} for {-|QUANTITY} people",
+        "{Gimme} {pizza_s} for a {party} of {-|QUANTITY}",
     ]
-}, function (request, response) {
-    console.log('PartyIntent');
-    var partySize = request.slot('NUM_PEOPLE');
-    if (partySize === undefined) {
-        response.say("Awesome, how many people are coming?");
-        session.state = STATE_PARTY_QTY;
-    }
-
-    var pizza = {};
-    var order;
-
-    calculatePartyPizzas(request, pizza)
-    pizza.size = "medium";
-    if(pizza.quantity && pizza.quantity < 5)
-    {
-    	handlePizzaInput(request, response, pizza);
-    }
-    else
-    {
-    	calculatePartyOrder(request, pizza, order)
-    }
-
-    session.state = STATE_PARTY;
-});
-
-function handlePartyInput(request, response, input) {
-
-}
+}, router);
 
 // A fully-formed sentence requesting pizza with any or none of quantity, size, or toppings
-app.intent('GimmePizzaIntent', {
+app.intent(GIMME_PIZZA_INTENT, {
     'slots': { 'SIZE': 'PizzaSizes', 'TOPPING': 'PizzaToppings', 'TOPPING_B': 'PizzaToppings', 'TOPPING_C': 'PizzaToppings', 'QUANTITY': 'AMAZON.NUMBER', 'QUANTITY_WORD': 'QuantityWords' },
     'utterances': [
         '{Gimme} {quantity_s} {pizza_s}',
         '{Gimme} {quantity_s} {-|SIZE} {pizza_s}',
         '{Gimme} {quantity_s} {topping_s} {pizza_s}',
         '{Gimme} {quantity_s} {-|SIZE} {topping_s} {pizza_s}',
+        '{Gimme} {quantity_s} {pizza_s} with {topping_s} ',
+        '{Gimme} {quantity_s} {-|SIZE} {pizza_s} with {topping_s} ',
     ]
-}, function (request, response) {
-    console.log('GimmePizzaIntent');
-    if (session.state === STATE_CLARIFY) {
-        response.say("I thought we were ready, want to start over?");
-        return;
-    }
-
-    var pizza = {};
-
-    addQuantityToPizza(request, pizza);
-    addSizeToPizza(request, pizza);
-    addToppingsToPizza(request, pizza);
-
-    handlePizzaInput(request, response, pizza);
-});
-
-// User says yes
-app.intent('AMAZON.YesIntent', {}, function (request, response) {
-    console.log('AMAZON.YesIntent');
-    if (session.state === STATE_ADD_MORE) {
-        response.say("Great, what else do you want?");
-        session.state = STATE_START;
-    } else if (session.state === STATE_CHECKOUT) {
-        var order = createOrderFromPizzas(session.order);
-        placeOrder(order, function (description) {
-            response.say("Great, I ordered " + description).send();
-        });
-        return false;
-    }
-});
-
-// User says no
-app.intent('AMAZON.NoIntent', {}, function (request, response) {
-    console.log('AMAZON.NoIntent');
-    if (session.state === STATE_ADD_MORE) {
-        response.say("No problem");
-        checkout(request, response);
-        // Checkout is asynchronous
-        return false;
-    } else if (session.state === STATE_CHECKOUT) {
-        session.state = STATE_START;
-        response.say("Alright, well what would you like?");
-    }
-});
+}, router);
 
 // A quantity in response to a clarification prompt
-app.intent('QuantityIntent', {
+app.intent(QUANTITY_INTENT, {
     'slots': { 'QUANTITY': 'AMAZON.NUMBER' },
     'utterances': [
         '{-|QUANTITY}',
     ]
-}, function (request, response) {
-    console.log('QuantityIntent');
-    if (session.state == STATE_CLARIFY) {
-        handlePizzaInput(request, response, addQuantityToPizza(request, {}));
-        return;
-    } else if (session.state == STATE_PARTY_QTY) {
-        return;
-    }
-});
+}, router);
 
 // A size in response to a clarification prompt
-app.intent('SizeIntent', {
+app.intent(SIZE_INTENT, {
     'slots': { 'SIZE': 'PizzaSizes' },
     'utterances': [
         '{-|SIZE}',
     ]
-}, function (request, response) {
-    console.log('SizeIntent');
-    if (session.state !== STATE_CLARIFY) {
-        response.say("Wtf do you want");
-        return;
-    }
-
-    handlePizzaInput(request, response, addSizeToPizza(request, {}));
-});
+}, router);
 
 // Toppings in response to a clarification prompt
-app.intent('ToppingIntent', {
+app.intent(TOPPING_INTENT, {
     'slots': { 'TOPPING': 'PizzaToppings', 'TOPPING_B': 'PizzaToppings', 'TOPPING_C': 'PizzaToppings' },
     'utterances': [
         '{topping_s}',
     ]
-}, function (request, response) {
-    console.log('ToppingIntent');
-    if (session.state !== STATE_CLARIFY) {
-        response.say("Wtf do you want");
-        return;
+}, router);
+
+// User says yes
+app.intent(YES_INTENT, {}, router);
+
+// User says no
+app.intent(NO_INTENT, {}, router);
+
+// User says stop or shut up
+app.intent(STOP_INTENT, {}, router);
+
+function handlePartyIntent(request, response) {
+    var numPeople = request.slot('QUANTITY');
+    if (numPeople === undefined || numPeople === '?') {
+        response.say("Awesome, ");
+        session.prompt = "how many people are coming to your event?";
+        return STATE_PARTY_QTY;
     }
 
-    handlePizzaInput(request, response, addToppingsToPizza(request, {}));
-});
+    var pizza = calculatePartyPizzas(numPeople);
+    response.say("Hmm, ");
+    session.prompt = ["does", pizza.quantity, "pizza" + pizza.plural, "sound okay?"].join(' ');
+    session.order = [pizza];
+    return STATE_CONFIRM_PIZZA_QTY;
+}
 
-// TODO: Better error handling for unrecognizable quantities
-// Augment a pizza object with quantity data
+function createPartyOrder(numPizzas, size) {
+    var numCheese = Math.ceil(numPizzas / 3);
+    var numPepperoni = Math.round(numPizzas / 3);
+    var numSausage = Math.floor(numPizzas / 3);
+
+    var order = [];
+    if (numCheese >= 1) {
+        order.push({
+            size: size,
+            toppings: ["cheese"],
+            quantity: numCheese
+        });
+    }
+    if (numPepperoni >= 1) {
+        order.push({
+            size: size,
+            toppings: ["pepperoni"],
+            quantity: numPepperoni
+        });
+    }
+    if (numSausage >= 1) {
+        order.push({
+            size: size,
+            toppings: ["sausage"],
+            quantity: numSausage
+        });
+    }
+    return order;
+}
+
+function calculatePartyPizzas(numPeople) {
+    console.log('Calculate Pizza Quantity');
+    var numPizzas = Math.ceil(parseInt(numPeople) * 3 / 8);
+    var pizza = { size: "medium" };
+    return quantifyPizza(pizza, numPizzas);
+}
+
+// Augment a pizza object with quantity data from a request
 function addQuantityToPizza(request, pizza) {
     console.log("addQuantityToPizza");
     var quantity = request.slot('QUANTITY');
@@ -255,9 +404,14 @@ function addQuantityToPizza(request, pizza) {
         }
     }
 
-    pizza.quantity = pizzaCount;
-    pizza.plural = pizzaCount > 1 ? 's' : '';
+    return quantifyPizza(pizza, pizzaCount);
+}
 
+// Augment a pizza object with a quantity
+function quantifyPizza(pizza, n) {
+    pizza.quantity = n;
+    pizza.plural = n > 1 ? 's' : '';
+    pizza.need_toppings = (n < 5) ? 1 : 0;
     return pizza;
 }
 
@@ -290,91 +444,96 @@ function addToppingsToPizza(request, pizza) {
     return pizza;
 }
 
-// Given a pizza object and a state, figure out what to ask for next
-function handlePizzaInput(request, response, input) {
-    console.log('handlePizzaInput ' + session.state);
-    // TODO: use a more well-defined pizza object
-    var pizza;
-    if (session.state === STATE_START) {
-        pizza = input;
-    } else if (session.state === STATE_CLARIFY) {
-        pizza = session.order.pop();
-        Object.assign(pizza, input);
-    }
+// Given a pizza object and some input, figure out what to ask for next
+function getNextPizzaState(request, response, pizza) {
+    console.log('getNextPizzaState ' + JSON.stringify(session) + ", pizza:" + JSON.stringify(pizza));
 
+    var newState;
     if (pizza.quantity === undefined) {
-        session.state = STATE_CLARIFY;
-        response.say("Sounds good, how many pizzas do you want?");
+        newState = STATE_PIZZA_QTY;
+        response.say("Sounds good, ");
+        session.prompt = "how many pizzas do you want?";
     } else if (pizza.size === undefined) {
-        session.state = STATE_CLARIFY;
-        response.say("Alright, what size pizza" + (pizza.plural ? 's' : '') + "  do you want: small, medium, large, or extra large?");
-    } else if (pizza.toppings === undefined) {
-        session.state = STATE_CLARIFY;
-        response.say("Got it, what toppings do you want on your pizza" + (pizza.plural ? 's' : '') + "?");
+        newState = STATE_PIZZA_SIZE;
+        response.say("Alright, ");
+        session.prompt = "what size pizza" + pizza.plural + " do you want: small, medium, large, or extra large?";
+    } else if (pizza.quantity >= 5) {
+        if (pizza.accepted_suggestion === false) {
+            newState = STATE_PIZZA_TOPPING;
+
+            response.say("No problem, ");
+            session.prompt = "what toppings do you want on your pizzas?";
+        } else {
+            newState = STATE_CONFIRM_TOPPING;
+
+            var cheese = Math.ceil(pizza.quantity / 3);
+            var pepperoni = Math.round(pizza.quantity / 3);
+            var sausage = Math.floor(pizza.quantity / 3);
+            response.say(["That's a lot of pizza!", "I suggest getting",
+                cheese, "cheese pizzas",
+                pepperoni, "pepperoni pizzas", "and",
+                sausage, "sausage pizzas. "].join(' '));
+            session.prompt = "do those toppings sound okay?";
+        }
+    } else if (pizza.quantity < 5 && pizza.need_toppings <= pizza.quantity) {
+        newState = STATE_PIZZA_TOPPING;
+        if (pizza.toppings) {
+            var toAdd = JSON.parse(JSON.stringify(pizza));
+            toAdd.quantity = 1;
+            session.order.push(toAdd);
+            pizza.toppings = [];
+            pizza.need_toppings++;
+        }
+
+        if (pizza.need_toppings <= pizza.quantity) {
+            var ordinal = "";
+            if (pizza.need_toppings === 4) {
+                ordinal = "fourth ";
+            } else if (pizza.need_toppings === 3) {
+                ordinal = "third ";
+            } else if (pizza.need_toppings === 2) {
+                ordinal = "second ";
+            } else if (pizza.need_toppings === 1 && pizza.quantity > 1) {
+                ordinal = "first ";
+            }
+            session.prompt = "what toppings do you want on your " + ordinal + "pizza?";
+        } else {
+            if (pizza.quantity > 1) {
+                return finishOrder(response, pizza);
+            } else {
+                return finishOrder(response, session.order[0]);
+            }
+        }
     } else {
-        session.state = STATE_ADD_MORE;
-        response.say("K, I'll add " + pizza.quantity + " " + pizza.size + " "
-            + joinAnd(pizza.toppings) + " pizza" + pizza.plural
-            + " to your order. Do you want to add another pizza?");
+        newState = finishOrder(response, pizza);
     }
 
     session.order.push(pizza);
+    return newState;
+}
+
+function finishOrder(response, pizza) {
+    if (pizza.toppings !== undefined && pizza.toppings.length) {
+        response.say(["Okay, I'll add", pizza.quantity, pizza.size, joinAnd(pizza.toppings),
+            "pizza" + pizza.plural, "to your order. "].join(' '));
+    } else if (pizza.quantity > 1) {
+        response.say(["Okay, I'll add those", pizza.size, "pizzas to your order. "].join(' '));
+    } else {
+        response.say(["Okay, I'll add that", pizza.size, "pizza with",
+            joinAnd(pizza.toppings), "to your order. "].join(' '));
+    }
+    session.prompt = "do you want to add another pizza?";
+    return STATE_ADD_MORE;
 }
 
 function checkout(request, response) {
-    session.state = STATE_CHECKOUT;
+    session.state = STATE_CONFIRM_CHECKOUT;
 
     var order = createOrderFromPizzas(session.order);
-    priceOrder(function (price) {
+    priceOrder(order, function(price) {
         response.say("I found a coupon for 50% off your order. Your total is " + price + ". Should I go ahead and place your order?").send();
+        response.reprompt('Should I go ahead and place your order?');
     });
-}
-
-function calculatePartyPizzas(request, pizza) {
-	console.log('Calculate Pizza Quantity')
-
-    var numPeople = request.slot('NUM_PEOPLE');
-    var pizzaCount;
-
-    if (numPeople) {
-        if (numPeople === '?') {
-            return pizza;
-        } else {
-            pizzaCount = Math.ceil(parseInt(numPeople) * 3.0 / 8.0);
-        }
-    }
-
-    pizza.quantity = pizzaCount;
-    pizza.plural = pizzaCount > 1 ? 's' : '';
-
-    return pizza;
-}
-
-function calculatePartyOrder(request, pizza) {
-	if(!pizza.quantity)
-	{
-		return pizza;
-	}
-
-	var numCheese = Math.ceil(pizza.quantity / 3.0)
-	var numPepperoni = Math.round(pizza.quantity / 3.0)
-	var numSausage = Math.floor(pizza.quantity / 3.0)
-
-	session.order = [{
-		size: pizza.size,
-		toppings: ["cheese"],
-		quantity: numCheese
-	},
-	{
-		size: pizza.size,
-		toppings: ["pepperoni"],
-		quantity: numPepperoni
-	},
-	{
-		size: pizza.size,
-		toppings: ["sausage"],
-		quantity: numSausage
-	}]
 }
 
 function createOrderFromPizzas(pizzas) {
@@ -399,9 +558,9 @@ function createOrderFromPizzas(pizzas) {
         }
 
         order.addItem(new pizzapi.Item({
-            code: codes.size[pizza.size],
+            code: codes.size[p.size],
             options: options,
-            quantity: pizza.quantity
+            quantity: p.quantity
         }));
     }
 
@@ -411,31 +570,40 @@ function createOrderFromPizzas(pizzas) {
         quantity: 1
     }));
 
+    console.log("Created order" + JSON.stringify(result, null, 2));
     return order;
 }
 
 function priceOrder(order, callback) {
-    order.price(function (result) {
-        callback(result.Order.Amounts.Payment);
+    order.price(function(result) {
+        console.log(JSON.stringify(result, null, 2));
+        callback(result.result.Order.Amounts.Payment);
     });
 }
 
 function placeOrder(order, callback) {
-    var cardNumber = '4100123422343234';
-
-    var cardInfo = new order.PaymentObject();
-    cardInfo.Amount = order.Amounts.Customer;
-    cardInfo.Number = cardNumber;
-    cardInfo.CardType = order.validateCC(cardNumber);
-    cardInfo.Expiration = '0115';//  01/15 just the numbers "01/15".replace(/\D/g,'');
-    cardInfo.SecurityCode = '777';
-    cardInfo.PostalCode = '90201'; // Billing Zipcode
-
-    order.Payments.push(cardInfo);
-
-    order.place(function (result) {
-        callback(result.result.Order.Products[0].descriptions[0].value);
+    // For debug purposes
+    order.validate(function(result) {
+        console.log(JSON.stringify(result, null, 2));
+        callback(generateOrderDescription(result.result.Order));
     });
+
+    // var cardNumber = '4100123422343234';
+
+    // var cardInfo = new order.PaymentObject();
+    // cardInfo.Amount = order.Amounts.Customer;
+    // cardInfo.Number = cardNumber;
+    // cardInfo.CardType = order.validateCC(cardNumber);
+    // cardInfo.Expiration = '0115';//  01/15 just the numbers "01/15".replace(/\D/g,'');
+    // cardInfo.SecurityCode = '777';
+    // cardInfo.PostalCode = '90201'; // Billing Zipcode
+
+    // order.Payments.push(cardInfo);
+
+    // order.place(function (result) {
+    //     console.log(JSON.stringify(result, null, 2));
+    //     callback(generateOrderDescription(result.result.Order));
+    // });
 }
 
 function orderUsual(callback) {
@@ -455,13 +623,6 @@ function orderUsual(callback) {
     //     code: '9193',
     //     quantity: 1
     // }));
-
-    order.validate(function (result) {
-        console.log("-------");
-        console.log("We did it!");
-        console.log(JSON.stringify(result, null, 2));
-        callback(generateOrderDescription(result.result.Order));
-    });
 
     // order.price(function (result) {
     //     console.log("-------");
