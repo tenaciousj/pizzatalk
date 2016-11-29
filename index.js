@@ -22,8 +22,11 @@ var DEFAULT_SESSION = {
     state: "start",
     // Current order details, stored as array of objects with quantity, size, topping
     order: [],
+    // Used if they have less than 5 pizzas and we ask for toppings individually
+    template: undefined,
     // Question we're asking the user
     prompt: "",
+    // Last question we asked, for reprompting and if they say something unexpected
     last_prompt: "You can tell me what pizza you want or that you're having a party"
 };
 
@@ -187,7 +190,7 @@ function handleConfirmPizzaQty(request, response, intent) {
             response.say("No problem, ");
             session.prompt = "how many pizzas do you want?";
             pizza.quantity = undefined;
-            order = [pizza];
+            session.order.push(pizza);
             session.state = STATE_PIZZA_QTY;
             break;
         default:
@@ -337,7 +340,7 @@ function handlePartyIntent(request, response) {
 
     var pizza = calculatePartyPizzas(numPeople);
     response.say("Hmm, ");
-    session.prompt = ["does", pizza.quantity, "pizza" + pizza.plural, "sound okay?"].join(' ');
+    session.prompt = ["does", pizza.quantity, "medium pizza" + pizza.plural, "sound okay?"].join(' ');
     session.order = [pizza];
     return STATE_CONFIRM_PIZZA_QTY;
 }
@@ -411,7 +414,6 @@ function addQuantityToPizza(request, pizza) {
 function quantifyPizza(pizza, n) {
     pizza.quantity = n;
     pizza.plural = n > 1 ? 's' : '';
-    pizza.need_toppings = (n < 5) ? 1 : 0;
     return pizza;
 }
 
@@ -457,51 +459,62 @@ function getNextPizzaState(request, response, pizza) {
         newState = STATE_PIZZA_SIZE;
         response.say("Alright, ");
         session.prompt = "what size pizza" + pizza.plural + " do you want: small, medium, large, or extra large?";
-    } else if (pizza.quantity >= 5) {
-        if (pizza.accepted_suggestion === false) {
+    } else if (pizza.toppings === undefined) {
+        if (pizza.quantity >= 5) {
+            if (pizza.accepted_suggestion === false) {
+                newState = STATE_PIZZA_TOPPING;
+
+                response.say("No problem, ");
+                session.prompt = "what toppings do you want on your pizzas?";
+            } else {
+                newState = STATE_CONFIRM_TOPPING;
+
+                var cheese = Math.ceil(pizza.quantity / 3);
+                var pepperoni = Math.round(pizza.quantity / 3);
+                var sausage = Math.floor(pizza.quantity / 3);
+                response.say(["That's a lot of pizza!", "I suggest getting",
+                    cheese, "cheese pizzas",
+                    pepperoni, "pepperoni pizzas", "and",
+                    sausage, "sausage pizzas. "].join(' '));
+                session.prompt = "do those toppings sound okay?";
+            }
+        } else {
             newState = STATE_PIZZA_TOPPING;
 
-            response.say("No problem, ");
-            session.prompt = "what toppings do you want on your pizzas?";
-        } else {
-            newState = STATE_CONFIRM_TOPPING;
+            // We haven't topped any pizzas yet
+            pizza.need_toppings = 1;
+            session.template = pizza;
+            var t = session.template;
+            pizza = { quantity: 1, size: pizza.size };
 
-            var cheese = Math.ceil(pizza.quantity / 3);
-            var pepperoni = Math.round(pizza.quantity / 3);
-            var sausage = Math.floor(pizza.quantity / 3);
-            response.say(["That's a lot of pizza!", "I suggest getting",
-                cheese, "cheese pizzas",
-                pepperoni, "pepperoni pizzas", "and",
-                sausage, "sausage pizzas. "].join(' '));
-            session.prompt = "do those toppings sound okay?";
-        }
-    } else if (pizza.quantity < 5 && pizza.need_toppings <= pizza.quantity) {
-        newState = STATE_PIZZA_TOPPING;
-        if (pizza.toppings) {
-            var toAdd = JSON.parse(JSON.stringify(pizza));
-            toAdd.quantity = 1;
-            session.order.push(toAdd);
-            pizza.toppings = [];
-            pizza.need_toppings++;
-        }
-
-        if (pizza.need_toppings <= pizza.quantity) {
             var ordinal = "";
-            if (pizza.need_toppings === 4) {
-                ordinal = "fourth ";
-            } else if (pizza.need_toppings === 3) {
-                ordinal = "third ";
-            } else if (pizza.need_toppings === 2) {
-                ordinal = "second ";
-            } else if (pizza.need_toppings === 1 && pizza.quantity > 1) {
+            if (t.need_toppings === 1 && t.quantity > 1) {
                 ordinal = "first ";
             }
             session.prompt = "what toppings do you want on your " + ordinal + "pizza?";
+        }
+    } else if (session.template !== undefined) {
+        var t = session.template;
+        t.need_toppings++;
+        session.order.push(pizza);
+        if (t.need_toppings <= t.quantity) {
+            pizza = { quantity: 1, size: pizza.size };
+            newState = STATE_PIZZA_TOPPING;
+            var ordinal = "";
+            if (t.need_toppings === 4) {
+                ordinal = "fourth ";
+            } else if (t.need_toppings === 3) {
+                ordinal = "third ";
+            } else if (t.need_toppings === 2) {
+                ordinal = "second ";
+            }
+            session.prompt = "what toppings do you want on your " + ordinal + "pizza?";
         } else {
-            if (pizza.quantity > 1) {
-                return finishOrder(response, pizza);
+            session.template = undefined;
+            if (t.quantity > 1) {
+                return finishOrder(response, t);
             } else {
-                return finishOrder(response, session.order[0]);
+                return finishOrder(response, pizza);
             }
         }
     } else {
@@ -517,7 +530,7 @@ function finishOrder(response, pizza) {
         response.say(["Okay, I'll add", pizza.quantity, pizza.size, joinAnd(pizza.toppings),
             "pizza" + pizza.plural, "to your order. "].join(' '));
     } else if (pizza.quantity > 1) {
-        response.say(["Okay, I'll add those", pizza.size, "pizzas to your order. "].join(' '));
+        response.say(["Okay, I'll add those", pizza.quantity, pizza.size, "pizzas to your order. "].join(' '));
     } else {
         response.say(["Okay, I'll add that", pizza.size, "pizza with",
             joinAnd(pizza.toppings), "to your order. "].join(' '));
@@ -551,12 +564,14 @@ function createOrderFromPizzas(pizzas) {
         deliveryMethod: 'Delivery'
     });
 
-    for (var p in pizzas) {
+    for (var i = 0, l = pizzas.length; i < l; i++) {
+        var p = pizzas[i];
         var options = [];
-        for (var t in p.toppings) {
-            options.push(codes.topping[t]);
+        for (var j = 0, m = p.toppings.length; j < m; j++) {
+            options.push(codes.topping[p.toppings[j]]);
         }
 
+        console.log("Item " + JSON.stringify(p) + " options: " + options);
         order.addItem(new pizzapi.Item({
             code: codes.size[p.size],
             options: options,
@@ -570,7 +585,7 @@ function createOrderFromPizzas(pizzas) {
         quantity: 1
     }));
 
-    console.log("Created order" + JSON.stringify(result, null, 2));
+    console.log("Created order" + JSON.stringify(order, null, 2));
     return order;
 }
 
@@ -646,6 +661,7 @@ function generateOrderDescription(order) {
             name += 's';
         }
         var toppings = joinAnd(product.descriptions[0].value.split(', '));
+        toppings = toppings.replace('Robust Inspired Tomato Sauce', 'tomato sauce');
         products.push(quantity + ' ' + name + ' with ' + toppings);
     }
     return joinAnd(products);
