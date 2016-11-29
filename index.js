@@ -645,7 +645,7 @@ function orderUsual(callback) {
     //     console.log(JSON.stringify(result, null, 2));
     // });
 
-    placeOrder(order);
+    placeOrder(order, callback);
 }
 
 function generateOrderDescription(order) {
