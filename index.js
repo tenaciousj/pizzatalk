@@ -5,10 +5,11 @@ var codes = require('./codes');
 var app = new alexa.app('Pizza');
 
 var STATE_START = "start";
-var STATE_PARTY = "party";
 var STATE_CLARIFY = "clarify";
 var STATE_ADD_MORE = "add more";
 var STATE_CHECKOUT = "checkout";
+var STATE_PARTY = "party";
+var STATE_PARTY_QTY = "party quantity";
 
 app.dictionary = {
     'quantity_s': ['{-|QUANTITY}', '{-|QUANTITY_WORD}'],
@@ -46,7 +47,6 @@ app.sessionEnded(function (request, response) {
 // app.intent('AMAZON.HelpIntent');
 // app.intent('AMAZON.RepeatIntent');
 // app.intent('AMAZON.StartOverIntent');
-// app.intent('AMAZON.StopIntent');
 
 app.intent('TestIntent', {
     'utterances': ['hello world', 'say hello world', 'to say hello world']
@@ -76,8 +76,8 @@ app.intent('TheUsualIntent', {
     'utterances': ['{Gimme} the usual']
 }, function (request, response) {
     console.log("Starting usual");
-    orderUsual(function (pizza) {
-        response.say("I ordered your favorite, " + pizza).send();
+    orderUsual(function (description) {
+        response.say("I ordered your favorite, " + description).send();
     });
     return false;
 });
@@ -101,13 +101,17 @@ app.intent('PartyIntent', {
 }, function (request, response) {
     console.log('PartyIntent');
     var partySize = request.slot('QUANTITY');
-    if (partSize === undefined) {
-        response.say("How many pizzas do you want?");
+    if (partySize === undefined) {
+        response.say("Awesome, how many people are coming?");
+        session.state = STATE_PARTY_QTY;
     } else {
 
     }
-    session.state = STATE_PARTY;
 });
+
+function handlePartyInput(request, response, input) {
+
+}
 
 // A fully-formed sentence requesting pizza with any or none of quantity, size, or toppings
 app.intent('GimmePizzaIntent', {
@@ -140,6 +144,12 @@ app.intent('AMAZON.YesIntent', {}, function (request, response) {
     if (session.state === STATE_ADD_MORE) {
         response.say("Great, what else do you want?");
         session.state = STATE_START;
+    } else if (session.state === STATE_CHECKOUT) {
+        var order = createOrderFromPizzas(session.order);
+        placeOrder(order, function (description) {
+            response.say("Great, I ordered " + description).send();
+        });
+        return false;
     }
 });
 
@@ -148,7 +158,12 @@ app.intent('AMAZON.NoIntent', {}, function (request, response) {
     console.log('AMAZON.NoIntent');
     if (session.state === STATE_ADD_MORE) {
         response.say("No problem");
-        // TODO: start checkout flow here
+        checkout(request, response);
+        // Checkout is asynchronous
+        return false;
+    } else if (session.state === STATE_CHECKOUT) {
+        session.state = STATE_START;
+        response.say("Alright, well what would you like?");
     }
 });
 
@@ -160,12 +175,14 @@ app.intent('QuantityIntent', {
     ]
 }, function (request, response) {
     console.log('QuantityIntent');
-    if (session.state !== STATE_CLARIFY) {
-        response.say("Wtf do you want");
+    if (session.state == STATE_CLARIFY) {
+        handlePizzaInput(request, response, addQuantityToPizza(request, {}));
+        return;
+    } else if (session.state == STATE_PARTY_QTY) {
         return;
     }
 
-    handlePizzaInput(request, response, addQuantityToPizza(request, {}));
+    response.say("Wtf do you want");
 });
 
 // A size in response to a clarification prompt
@@ -292,10 +309,18 @@ function handlePizzaInput(request, response, input) {
     session.order.push(pizza);
 }
 
-function orderUsual(callback) {
-    var fullAddress = new pizzapi.Address('2133 Sheridan Rd, Evanston, IL, 60201');
+function checkout(request, response) {
+    session.state = STATE_CHECKOUT;
+
+    var order = createOrderFromPizzas(session.order);
+    priceOrder(function (price) {
+        response.say("I found a coupon for 50% off your order. Your total is " + price + ". Should I go ahead and place your order?").send();
+    });
+}
+
+function createOrderFromPizzas(pizzas) {
     var myCustomer = new pizzapi.Customer({
-        address: fullAddress,
+        address: new pizzapi.Address('2133 Sheridan Rd, Evanston, IL, 60201'),
         firstName: 'William',
         lastName: 'Xiao',
         phone: '8167164599',
@@ -304,28 +329,73 @@ function orderUsual(callback) {
 
     var order = new pizzapi.Order({
         customer: myCustomer,
-        // Foster
-        storeID: 9175,
+        storeID: 9175, // Foster
         deliveryMethod: 'Delivery'
     });
 
-    order.addItem(new pizzapi.Item({
-        code: '12SCREEN',
-        options: ["P", "S"],
+    for (var p in pizzas) {
+        var options = [];
+        for (var t in p.toppings) {
+            options.push(codes.topping[t]);
+        }
+
+        order.addItem(new pizzapi.Item({
+            code: codes.size[pizza.size],
+            options: options,
+            quantity: pizza.quantity
+        }));
+    }
+
+    // 50% off!!!
+    order.addCoupon(new pizzapi.Coupon({
+        code: '9413',
         quantity: 1
     }));
 
-    order.addItem(new pizzapi.Item({
-        code: '12SCREEN',
-        options: ["K", "O"],
-        quantity: 21
-    }));
+    return order;
+}
+
+function priceOrder(order, callback) {
+    order.price(function (result) {
+        callback(result.Order.Amounts.Payment);
+    });
+}
+
+function placeOrder(order, callback) {
+    var cardNumber = '4100123422343234';
+
+    var cardInfo = new order.PaymentObject();
+    cardInfo.Amount = order.Amounts.Customer;
+    cardInfo.Number = cardNumber;
+    cardInfo.CardType = order.validateCC(cardNumber);
+    cardInfo.Expiration = '0115';//  01/15 just the numbers "01/15".replace(/\D/g,'');
+    cardInfo.SecurityCode = '777';
+    cardInfo.PostalCode = '90201'; // Billing Zipcode
+
+    order.Payments.push(cardInfo);
+
+    order.place(function (result) {
+        callback(result.result.Order.Products[0].descriptions[0].value);
+    });
+}
+
+function orderUsual(callback) {
+    var pizzas = [{
+        size: 'medium',
+        toppings: ['pepperoni', 'sausage'],
+        quantity: 1,
+    }, {
+        size: 'medium',
+        toppings: ['bacon', 'onions'],
+        quantity: 1,
+    }];
+    var order = createOrderFromPizzas(pizzas);
 
     // Two medium 2-toppings for 5.99 each
-    order.addCoupon(new pizzapi.Coupon({
-        code: '9193',
-        quantity: 1
-    }));
+    // order.addCoupon(new pizzapi.Coupon({
+    //     code: '9193',
+    //     quantity: 1
+    // }));
 
     order.validate(function (result) {
         console.log("-------");
@@ -340,24 +410,7 @@ function orderUsual(callback) {
     //     console.log(JSON.stringify(result, null, 2));
     // });
 
-    var cardNumber = '4100123422343234';
-
-    var cardInfo = new order.PaymentObject();
-    cardInfo.Amount = order.Amounts.Customer;
-    cardInfo.Number = cardNumber;
-    cardInfo.CardType = order.validateCC(cardNumber);
-    cardInfo.Expiration = '0115';//  01/15 just the numbers "01/15".replace(/\D/g,'');
-    cardInfo.SecurityCode = '777';
-    cardInfo.PostalCode = '90201'; // Billing Zipcode
-
-    order.Payments.push(cardInfo);
-
-    // order.place(function (result) {
-    //     console.log("-------");
-    //     console.log("Placed!");
-    //     console.log(JSON.stringify(result, null, 2));
-    //     callback(result.result.Order.Products[0].descriptions[0].value);
-    // });
+    placeOrder(order);
 }
 
 function generateOrderDescription(order) {
